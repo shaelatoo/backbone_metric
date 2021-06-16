@@ -1,0 +1,10 @@
+__pycache__
+*~
+[#]*[#]
+*.bak
+*.back
+.DS_Store
+*/.DS_Store
+*/*/.DS_Store
+
+doing*
