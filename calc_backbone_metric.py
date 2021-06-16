@@ -14,8 +14,6 @@
 import numpy as np
 import os
 import math
-from math import sin
-from math import cos
 import argparse
 from astropy.io import fits
 from scipy.linalg import norm
@@ -24,40 +22,30 @@ import csv
 import matplotlib.cm as cm
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
+import read_wsa_bfield
+import angular_separation
 
 
 def find_neutral_line_coords(bcbfile, altitude):
     """ finds neutral lines in WSA magnetic field model (bcb_* file) slices """
 
-    # read bcb_* WSA output file
-    #     FORTRAN CODE EXCERPT:  steps = INT((bcube_outer_rad - 1.0d0)/delta_R)
-    data,header = fits.getdata(bcbfile, header=True)
-    nsteps = round((header['RADOUT'] - 1.) / header['DELTA_R'])
-    radii = np.linspace(1.0, header['RADOUT'], nsteps)
-    lats = np.linspace(-90, 90, data.shape[2])     ###   NOT SURE ABOUT THIS - SHOULD IT START AT -90 + GRID/2?
-    lons = np.linspace(0, 360. - header['grid'], round(360./header['grid'])) + header['CARRLONG']
+    # read bcb_* WSA output file, shift to carrington frame
+    wsa_bfield = read_wsa_bfield.read_wsa_bfield(bcbfile)
+    wsa_bfield.carrington_frame()
 
     # find altitude slice closest to desired altitude
-    closest_alt = np.argmin([abs(altitude - rad) for rad in radii])
-    B_alt = data[closest_alt]
+    closest_alt = np.argmin([abs(altitude - rad) for rad in wsa_bfield.radii])
+    B_alt = wsa_bfield.br[closest_alt]
 
     # translate to relative strength of radial field component
     B_tot = norm(B_alt, axis = 0)
     relative_Br_alt = np.divide(B_alt[0], B_tot)
 
-    # shift image so that longitude ~ 0 is on left
-    indzero=np.argmin(abs(lons-360.))
-    if lons[indzero] < 360.:
-        indzero += 1
-    shifted_relative_Br_alt = np.roll(relative_Br_alt, len(lons) - indzero, axis = 1)
-    shifted_lons = np.roll(lons, len(lons) - indzero)
-    shifted_lons[shifted_lons >= 360.] -= 360.
-
     # use matplotlib contour routine to get contour coordinates
     # Br is the first slice (dimension 2 of four), radial coordinate is dimension 1
     xs = []
     ys = []
-    contour_obj = plt.contour(shifted_lons, lats, shifted_relative_Br_alt, levels=[0.0])
+    contour_obj = plt.contour(wsa_bfield.lons, wsa_bfield.lats, relative_Br_alt, levels=[0.0])
     for segs in contour_obj.allsegs[0]:
         xs.extend(segs[:,0])
         ys.extend(segs[:,1])
@@ -156,34 +144,14 @@ def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_out
     return
 
 
-def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
-    """ calculates distance between coordinate locations coords0 and coords1 """
-
-    # convert to radians, if needed
-    if degrees:
-        first_term = sin(math.radians(theta0))*sin(math.radians(theta1))
-        second_term = cos(math.radians(theta0)) * cos(math.radians(theta1)) * \
-                  cos(math.radians(phi0-phi1))
-    else:
-        first_term = sin(theta0)*sin(theta1)
-        second_term = cos(theta0) * cos(theta1) * cos(phi0-phi1)
-    try:
-        dist = np.arccos(first_term + second_term)
-    except:
-        print(first_term + second_term)
-
-    if cossep:
-        return first_term + second_term
-
-    return dist
-
 
 def proximity_function(phi, theta, gamma, kappa):
     """ calculates the value of the proximity function at the point phi, theta """
 
     #prefactor = kappa / np.sinh(kappa) / 4. / math.pi
     #print(len(phi))
-    gammadotx = angular_separation(phi, theta, gamma[0], gamma[1], cossep=True, degrees=True)
+    gammadotx = angular_separation.angular_separation(phi, theta, gamma[0], gamma[1], \
+             cossep=True, degrees=True)
     #kent_val = prefactor * math.exp(kappa * gammadotx)
     kent_val = math.exp(kappa*gammadotx)
 
@@ -201,13 +169,11 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     # find proximity function value at each point in current sheet
     backbone = []
     for phi,theta in zip(cs_xs, cs_ys):
-        #print(phi.shape)
         angdist = []
         for slon,slat in gammas:
-            angdist.append(angular_separation(phi, theta, slon, slat, degrees=True))
-        gamma_ind = np.argmin(angdist)
-        val = proximity_function(phi, theta, gammas[gamma_ind, :], kappa)
-        backbone.append(val)
+            angdist.append(angular_separation.angular_separation(phi, theta, slon, slat, degrees=True))
+        gamma_ind = np.argmin(angdist)  # index of minimum angular distance
+        backbone.append(proximity_function(phi, theta, gammas[gamma_ind, :], kappa))
 
     # find proximity function value at each lat,lon in shell
     xs = np.linspace(0,360., num=360)
@@ -219,7 +185,7 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     for phi, theta in gammas:
         angdist = []
         for slon, slat in gammas:
-            angdist.append(angular_separation(phi,theta, slon, slat,degrees=True))
+            angdist.append(angular_separation.angular_separation(phi,theta, slon, slat,degrees=True))
         gamma_ind = np.argmin(angdist)
         shell_backbone.append(proximity_function(phi, theta, gammas[gamma_ind,:], kappa))
     
@@ -245,32 +211,6 @@ def backbone_metric(tomofile, bcbfile, altitude, figure_outfile=False):
 
 
 
-#def testing(tomofile):
-#   """ test procedure created when I was writing the file - may not work anymore """
-
-    #streamer_xs, streamer_ys = identify_tomography_peaks(tomofile)
-    #xs = np.linspace(0,360., num=360)
-    #ys = np.linspace(-90.,90.,num=181)
-    #cs_xs2, cs_ys2 = np.meshgrid(xs, ys)
-    #cs_ys2 = np.reshape(cs_ys2, (1, 360*181))
-    #cs_xs2 = np.reshape(cs_xs2, (1, 360*181))
-    #backbone = calc_backbone_metric(cs_xs2, cs_ys2, streamer_xs, streamer_ys, True)
-    #fig = plt.figure(figsize=(10, 6))
-    #plt.imshow(np.reshape(backbone,(181,360)), extent=(cs_xs2.min(), cs_xs2.max(), \
-    #                    cs_ys2.min(), cs_ys2.max()), origin="lower")
-    #plt.colorbar(fraction=0.026, pad=0.04)
-    #plt.plot(streamer_xs, streamer_ys, 'b.', label = 'e- density peaks')
-    #plt.title('Proximity Function Value, kappa=100.', fontsize=16)
-    #plt.ylabel('Latitude', fontsize=14)
-    #plt.xlabel('Longitude', fontsize=14)
-    #tfilename = os.path.basename(tomofile)
-    #tfilestem = os.path.splitext(tfilename)[0]
-    #plt.savefig('/home/sjonesme/Desktop/meeting_image/backbone_vals_test_' + \
-    #              tfilestem + '.jpg')
-
-    #return
-
-
 if __name__ == '__main__':
 
     ARG_PARSER = argparse.ArgumentParser()
@@ -278,19 +218,7 @@ if __name__ == '__main__':
     ARG_PARSER.add_argument('-a', '--altitude', action='store', default='', dest='altitude', type=float)
     ARG_PARSER.add_argument('-b', '--bcbfile', action='store', default='', dest='bcbfile')
     ARG_PARSER.add_argument('-fo', '--figure_outfile', action='store', default=False)
-    ARG_PARSER.add_argument('-test', '--test', action='store_true')
     ARGS = ARG_PARSER.parse_args()
-    tomofile = ARGS.tomofile
-    bcbfile = ARGS.bcbfile
-    altitude = ARGS.altitude
-    figure_outfile = ARGS.figure_outfile
-    test = ARGS.test
 
     #figure_outfile = '/home/sjonesme/Desktop/meeting_image/tomography_currentsheet_comparison.jpg')
-    if test:
-        testing(tomofile)
-    else:
-        print(backbone_metric(tomofile, bcbfile, altitude, figure_outfile))
-        
-
-    exit(0)
+    print(backbone_metric(ARGS.tomofile, ARGS.bcbfile, ARGS.altitude, ARGS.figure_outfile))
