@@ -37,7 +37,7 @@ class read_wsa_bfield:
         indzero=np.argmin(abs(self.lons-360.))
         if self.lons[indzero] < 360.:
             indzero += 1
-        self.br = np.roll(self.br, len(self.lons) - indzero, axis = 1)
+        self.br = np.roll(self.br, len(self.lons) - indzero, axis = 0)
         shifted_lons = np.roll(self.lons, len(self.lons) - indzero)
         shifted_lons[shifted_lons >= 360.] -= 360.
         self.lons = shifted_lons
