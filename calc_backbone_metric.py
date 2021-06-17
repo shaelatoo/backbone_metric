@@ -25,6 +25,13 @@ import matplotlib.pyplot as plt
 import read_wsa_bfield
 import angular_separation
 
+# electron density peak-finding parameters
+mindiff = 0.01 
+min_series_max = 10.
+prom_scale = 30.
+height_scale = 8.
+min_peak_width = 8.
+
 
 def find_neutral_line_coords(bcbfile, altitude):
     """ finds neutral lines in WSA magnetic field model (bcb_* file) slices """
@@ -86,9 +93,10 @@ def identify_tomography_peaks(tomofile):
     for lon_ind in range(len(tomo_lon)):
         lon_strip = emap[:,lon_ind]
         biggest_diff = np.max(abs(np.diff(lon_strip)))
-        if biggest_diff >= 0.00000001 and lon_strip.max() > emap.max() / 10.:
-            peaks,_ = find_peaks(lon_strip, prominence = lon_strip.max() / 30., height = emap.max() / 8., \
-                               width = 8.)
+        if biggest_diff >= mindiff and lon_strip.max() > emap.max() / min_series_max:
+            peaks,_ = find_peaks(lon_strip, prominence = lon_strip.max() / prom_scale, \
+                               height = emap.max() / height_scale, \
+                               width = min_peak_width)
             #peaks,_ = find_peaks(lon_strip)
             streamer_lats.extend([tomo_lat[peak] for peak in peaks])
             streamer_lons.extend([tomo_lon[lon_ind] for peak in peaks])
