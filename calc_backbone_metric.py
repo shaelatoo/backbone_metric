@@ -26,7 +26,7 @@ import read_wsa_bfield
 import angular_separation
 
 # electron density peak-finding parameters
-mindiff = 0.01 
+mindiff = 0.0001 
 min_series_max = 10.
 prom_scale = 30.
 height_scale = 8.
@@ -106,9 +106,9 @@ def identify_tomography_peaks(tomofile):
         lat_strip = np.append(emap[lat_ind, :], emap[lat_ind, : wrap_end])
         #lat_strip.append(emap[lat_ind, : wrap_end])
         biggest_diff = np.max(abs(np.diff(lat_strip)))
-        if biggest_diff >= 0.0000001 and lat_strip.max() > emap.max() / 10.:
-             peaks,_ = find_peaks(lat_strip, prominence = lat_strip.max() / 30., \
-                               height = emap.max() / 8., width = 8.)
+        if biggest_diff >= mindiff and lat_strip.max() > emap.max() / min_series_max:
+             peaks,_ = find_peaks(lat_strip, prominence = lat_strip.max() / prom_scale, \
+                               height = emap.max() / height_scale, width = min_peak_width)
              peaks[peaks >= len(tomo_lon)] -= len(tomo_lon)
              streamer_lats.extend([tomo_lat[lat_ind] for peak in peaks])
              streamer_lons.extend([tomo_lon[peak] for peak in peaks])
