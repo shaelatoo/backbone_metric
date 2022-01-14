@@ -37,7 +37,24 @@ class read_wsa_bfield:
         indzero=np.argmin(abs(self.lons-360.))
         if self.lons[indzero] < 360.:
             indzero += 1
-        self.br = np.roll(self.br, len(self.lons) - indzero, axis = 0)
+        self.br = np.roll(self.br, len(self.lons) - indzero, axis = 3)
+        #self.br = np.roll(self.br, indzero, axis = 3)
         shifted_lons = np.roll(self.lons, len(self.lons) - indzero)
+        #shifted_lons = np.roll(self.lons, indzero)
         shifted_lons[shifted_lons >= 360.] -= 360.
         self.lons = shifted_lons
+
+
+# testing code
+#bcbfile='/home/sjonesme/wsa/WSA_CAT/WSA/TOMOGRAPHY_COMP/DATA/WSA_OUT/AGONG/ACE/UPDATED/2.0deg/L90R5.0/bcb_201006160200R000.fits'
+#wsa_bfield = read_wsa_bfield.read_wsa_bfield(bcbfile)
+#br = wsa_bfield.br
+#wsa_bfield.carrington_frame()
+#newbr = wsa_bfield.br
+#fig,ax=plt.subplots(nrows=2, ncols=1)
+#ax[0].imshow(br[0,0,:,:], origin='lower')
+#ax[1].imshow(newbr[0,0,:,:], origin='lower')
+#ax[0].set_title('unrotated')
+#ax[1].set_title('rotated')
+#fig.savefig('/home/sjonesme/Desktop/meeting_image/carrframe_check.jpg')
+

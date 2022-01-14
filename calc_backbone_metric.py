@@ -23,7 +23,6 @@ import matplotlib.cm as cm
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 import read_wsa_bfield
-import angular_separation
 
 # electron density peak-finding parameters
 mindiff = 0.0001 
@@ -31,6 +30,29 @@ min_series_max = 10.
 prom_scale = 30.
 height_scale = 8.
 min_peak_width = 8.
+
+
+def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
+    """ calculates distance between two points on a sphere, in radians """
+
+
+    if degrees:    # convert to radians, if needed
+        first_term = math.sin(math.radians(theta0))*math.sin(math.radians(theta1))
+        second_term = math.cos(math.radians(theta0)) * math.cos(math.radians(theta1)) * \
+                  math.cos(math.radians(phi0-phi1))
+    else:
+        first_term = math.sin(theta0)*math.sin(theta1)
+        second_term = math.cos(theta0) * math.cos(theta1) * math.cos(phi0-phi1)
+
+    try:
+        dist = np.arccos(first_term + second_term)
+    except:
+        print(first_term + second_term)
+
+    if cossep:     # return the cosine of the separation instead
+        return first_term + second_term
+
+    return dist
 
 
 def find_neutral_line_coords(bcbfile, altitude):
@@ -61,7 +83,7 @@ def find_neutral_line_coords(bcbfile, altitude):
 
 
 def read_tomo(filename):
-    """ reads .sav files with slice at fixed radius created by digest_tomography.pro """
+    """ reads .csv files with slice at fixed radius created by digest_tomography.pro """
 
     tomo_lat = []
     e_density_map = []
@@ -90,6 +112,7 @@ def identify_tomography_peaks(tomofile):
     # find peaks in electron density slice
     streamer_lats=[]
     streamer_lons=[]
+    # loop over every column of image
     for lon_ind in range(len(tomo_lon)):
         lon_strip = emap[:,lon_ind]
         biggest_diff = np.max(abs(np.diff(lon_strip)))
@@ -101,6 +124,7 @@ def identify_tomography_peaks(tomofile):
             streamer_lats.extend([tomo_lat[peak] for peak in peaks])
             streamer_lons.extend([tomo_lon[lon_ind] for peak in peaks])
 
+    # loop over every row of image
     for lat_ind in range(len(tomo_lat)):
         wrap_end = round(10. / 360. * len(tomo_lon)) #tack on some extra data so we can find peaks near the edges
         lat_strip = np.append(emap[lat_ind, :], emap[lat_ind, : wrap_end])
@@ -156,12 +180,12 @@ def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_out
 def proximity_function(phi, theta, gamma, kappa):
     """ calculates the value of the proximity function at the point phi, theta """
 
-    #prefactor = kappa / np.sinh(kappa) / 4. / math.pi
+    prefactor = kappa / np.sinh(kappa) / 4. / math.pi
     #print(len(phi))
-    gammadotx = angular_separation.angular_separation(phi, theta, gamma[0], gamma[1], \
+    gammadotx = angular_separation(phi, theta, gamma[0], gamma[1], \
              cossep=True, degrees=True)
-    #kent_val = prefactor * math.exp(kappa * gammadotx)
-    kent_val = math.exp(kappa*gammadotx)
+    kent_val = prefactor * math.exp(kappa * gammadotx)
+    #kent_val = math.exp(kappa*gammadotx)
 
     return kent_val
 
@@ -179,7 +203,7 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     for phi,theta in zip(cs_xs, cs_ys):
         angdist = []
         for slon,slat in gammas:
-            angdist.append(angular_separation.angular_separation(phi, theta, slon, slat, degrees=True))
+            angdist.append(angular_separation(phi, theta, slon, slat, degrees=True))
         gamma_ind = np.argmin(angdist)  # index of minimum angular distance
         backbone.append(proximity_function(phi, theta, gammas[gamma_ind, :], kappa))
 
@@ -193,13 +217,14 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     for phi, theta in gammas:
         angdist = []
         for slon, slat in gammas:
-            angdist.append(angular_separation.angular_separation(phi,theta, slon, slat,degrees=True))
+            angdist.append(angular_separation(phi,theta, slon, slat,degrees=True))
         gamma_ind = np.argmin(angdist)
         shell_backbone.append(proximity_function(phi, theta, gammas[gamma_ind,:], kappa))
     
 
     # average over entire current sheet
     metric = sum(backbone) / len(backbone) / sum(shell_backbone) * len(shell_backbone)
+    #metric = np.mean(backbone)
 
     if test:
         return backbone
