@@ -223,7 +223,6 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
 
     # average over entire current sheet
     metric = sum(backbone) / len(backbone) / sum(shell_backbone) * len(shell_backbone)
-    print(metric, np.mean(backbone), np.mean(shell_backbone))
     #metric = np.mean(backbone)
 
     if test:
