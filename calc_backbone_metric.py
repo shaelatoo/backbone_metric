@@ -181,7 +181,6 @@ def proximity_function(phi, theta, gamma, kappa):
     """ calculates the value of the proximity function at the point phi, theta """
 
     prefactor = kappa / np.sinh(kappa) / 4. / math.pi
-    #print(len(phi))
     gammadotx = angular_separation(phi, theta, gamma[0], gamma[1], \
              cossep=True, degrees=True)
     kent_val = prefactor * math.exp(kappa * gammadotx)
@@ -208,13 +207,13 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
         backbone.append(proximity_function(phi, theta, gammas[gamma_ind, :], kappa))
 
     # find proximity function value at each lat,lon in shell
-    xs = np.linspace(0,360., num=360)
-    ys = np.linspace(-90.,90.,num=181)
+    xs = np.linspace(0,360., num=180)
+    ys = np.linspace(-90.,90.,num=91)
     cs_xs2, cs_ys2 = np.meshgrid(xs, ys)
-    cs_ys2 = np.reshape(cs_ys2, (360*181))
-    cs_xs2 = np.reshape(cs_xs2, (360*181))
+    cs_ys2 = np.reshape(cs_ys2, (180*91))
+    cs_xs2 = np.reshape(cs_xs2, (180*91))
     shell_backbone = []
-    for phi, theta in gammas:
+    for phi, theta in zip(cs_xs2, cs_ys2):
         angdist = []
         for slon, slat in gammas:
             angdist.append(angular_separation(phi,theta, slon, slat,degrees=True))
@@ -224,6 +223,7 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
 
     # average over entire current sheet
     metric = sum(backbone) / len(backbone) / sum(shell_backbone) * len(shell_backbone)
+    print(metric, np.mean(backbone), np.mean(shell_backbone))
     #metric = np.mean(backbone)
 
     if test:
@@ -235,7 +235,7 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
 def backbone_metric(tomofile, bcbfile, altitude, figure_outfile=False):
     """ main module """
 
-    cs_xs, cs_ys = find_neutral_line_coords(bcbfile, altitude)
+    cs_xs,cs_ys = find_neutral_line_coords(bcbfile, altitude)
     streamer_xs, streamer_ys = identify_tomography_peaks(tomofile)
     metric = calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys)
     if figure_outfile:
