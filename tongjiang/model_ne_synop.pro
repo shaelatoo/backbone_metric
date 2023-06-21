@@ -1,4 +1,4 @@
-pro sp2xy,Ld,Bd,R,x,y,z,Bd0=Bd0,Pd=Pd
+pro sp2xy,Ld,Bd,R,x,y,z,lat=lat, lon=lon, Bd0=Bd0,Pd=Pd
 ;+Purpose
 ; transform from Stonyhurst heliographic coord
 ;(same as Carr.coord. but with Lon. of meridian=0)
