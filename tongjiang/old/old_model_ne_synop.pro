@@ -12,6 +12,16 @@ pro sp2xy,Ld,Bd,R,x,y,z,Bd0=Bd0,Pd=Pd
 
  if n_elements(Bd0) le 0 then Bd0=0
  if n_elements(Pd) le 0 then Pd=0
+ Ld_orig = Ld
+ Bd_orig = Bd
+ ;too_small_lon = where(Ld lt 0., small_cnt)
+ ;if small_cnt ne 0. then Ld[too_small_lon] += 360.
+ ;too_big_lon = where(Ld ge 360., big_cnt)
+ ;if big_cnt ne 0. then Ld[too_bit_lon] -= 360.
+ ;too_small_lat = where(Bd lt 0., small_cnt)
+ ;if small_cnt ne 0. then Bd[too_small_lat] += 360.
+ ;too_big_lat = where(Bd ge 360., big_cnt)
+ ;if big_cnt ne 0. then Bd[too_bit_lat] -= 360.
  L=Ld*!pi/180.
  B=Bd*!pi/180.
  B0=Bd0*!pi/180.
@@ -22,9 +32,11 @@ pro sp2xy,Ld,Bd,R,x,y,z,Bd0=Bd0,Pd=Pd
  x=x1*cos(P)-y1*sin(P)
  y=y1*cos(P)+x1*sin(P)
  z=z1
+ ;Ld = Ld_orig
+ ;Bd = Bd_orig
 end
 
-pro model_ne_synop, dens, Ri, nemap, quiet=quiet,iw=iw,name=name,sm=sm, crname=crname
+pro model_ne_synop, dens, Ri, nemap, quiet=quiet,iw=iw,name=name,lat=lat,lon=lon,sm=sm, crname=crname
 ;+purpose: create a synopic map of Ne at solar radius, Rin,
 ; from the Ne cube in Cartesian coordinate (x,y,z) with z
 ; along solar rotation axis, and xy for solar equatoral plane,
@@ -40,7 +52,6 @@ pro model_ne_synop, dens, Ri, nemap, quiet=quiet,iw=iw,name=name,sm=sm, crname=c
 ;   J-index for Carrington latitude (-90 to 90) deg
 ;-
  if not keyword_set(name) then name=''
- if not keyword_set(crname) then crname='CR 0000'
  if not keyword_set(iw) then iw=0 
  Rout=4.0d ;outer bound of domain, in unit of Rsun
  Rin =1.5d ;inner bound of damain
@@ -78,14 +89,14 @@ pro model_ne_synop, dens, Ri, nemap, quiet=quiet,iw=iw,name=name,sm=sm, crname=c
   ;show result
  if not keyword_set(quiet) then begin
    loadct,0
-;  print,'sm=',sm
+   print,'sm=',sm
    if keyword_set(sm) then window,iw,xs=600, ys=300,retain=2 $
    else window,iw,xs=800, ys=400,retain=2
    rname=string(Ri, format='(f3.1)')+' Rsun'
    plot_image,alog10(nemap>m1<m2),/noad,xmajor=6,xtickinterval=60.,$
      xtitle='Carrington longitude (deg)',$
      ytitle='Carrington latitude (deg)',$
-     title=name+' Ne for '+crname+' at '+ rname,charsize=1.5,$
+     title=name+' Ne for '+crname+' '+ rname,charsize=1.5,$
      origin=[0,-90],scale=[1,1],/xst,/yst
      xyouts,10,80,'Max Ne='+mne,charsize=1.5
  endif
