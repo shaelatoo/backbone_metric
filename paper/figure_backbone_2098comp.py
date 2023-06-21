@@ -6,10 +6,10 @@
 # figure_backbone_2098comp.py
 # 
 # ==========================================================================
-# 11/18/2020    sij    created 
+# 01/19/2022    sij    created 
 #
 #-----------------------------------------------------------------------------
-""" make figures for results section of AGU 2020 poster """
+""" make figure comparing two versions of CR2098 model for first backbone paper """
 
 import numpy as np
 from calc_backbone_metric import read_tomo
