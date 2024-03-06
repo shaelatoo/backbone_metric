@@ -157,6 +157,7 @@ def identify_tomography_peaks(tomofile):
 def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile, metric_val):
     """ creates a figure showing electron density peaks and model current sheet locations """
 
+    print(f'making file name: {figure_outfile}')
     tomo_lon, tomo_lat, e_density_map = read_tomo(tomofile)
     emap = np.asarray(e_density_map)
     # temporary plotting instructions - for debugging
