@@ -120,7 +120,6 @@ def identify_tomography_peaks(tomofile):
             peaks,_ = find_peaks(lon_strip, prominence = lon_strip.max() / prom_scale, \
                                height = emap.max() / height_scale, \
                                width = min_peak_width)
-            #peaks,_ = find_peaks(lon_strip)
             streamer_lats.extend([tomo_lat[peak] for peak in peaks])
             streamer_lons.extend([tomo_lon[lon_ind] for peak in peaks])
 
@@ -128,7 +127,6 @@ def identify_tomography_peaks(tomofile):
     for lat_ind in range(len(tomo_lat)):
         wrap_end = round(10. / 360. * len(tomo_lon)) #tack on some extra data so we can find peaks near the edges
         lat_strip = np.append(emap[lat_ind, :], emap[lat_ind, : wrap_end])
-        #lat_strip.append(emap[lat_ind, : wrap_end])
         biggest_diff = np.max(abs(np.diff(lat_strip)))
         if biggest_diff >= mindiff and lat_strip.max() > emap.max() / min_series_max:
              peaks,_ = find_peaks(lat_strip, prominence = lat_strip.max() / prom_scale, \
@@ -206,6 +204,8 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
             angdist.append(angular_separation(phi, theta, slon, slat, degrees=True))
         gamma_ind = np.argmin(angdist)  # index of minimum angular distance
         backbone.append(proximity_function(phi, theta, gammas[gamma_ind, :], kappa))
+    backbone_weights = np.cos(np.radians(cs_ys))  # weighting to de-emphasize higher-latitude points, which are 
+                   #     disproportionately represented
 
     # find proximity function value at each lat,lon in shell
     xs = np.linspace(0,360., num=180)
@@ -220,11 +220,11 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
             angdist.append(angular_separation(phi,theta, slon, slat,degrees=True))
         gamma_ind = np.argmin(angdist)
         shell_backbone.append(proximity_function(phi, theta, gammas[gamma_ind,:], kappa))
-    
+    shell_weights = np.cos(np.radians(cs_ys2))
 
     # average over entire current sheet
-    metric = sum(backbone) / len(backbone) / sum(shell_backbone) * len(shell_backbone)
-    #metric = np.mean(backbone)
+    metric = np.average(backbone, weights=backbone_weights) / np.average(shell_backbone,
+                             weights=shell_weights)
 
     if test:
         return backbone
@@ -253,5 +253,4 @@ if __name__ == '__main__':
     ARG_PARSER.add_argument('-fo', '--figure_outfile', action='store', default=False)
     ARGS = ARG_PARSER.parse_args()
 
-    #figure_outfile = '/home/sjonesme/Desktop/meeting_image/tomography_currentsheet_comparison.jpg')
     print(backbone_metric(ARGS.tomofile, ARGS.bcbfile, ARGS.altitude, ARGS.figure_outfile))
