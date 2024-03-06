@@ -24,8 +24,8 @@ pro digest_tomography, tomo_file, radius, savefile
 ;;                                                            ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; read sav file
-restore, tomo_file
+; read dat file, get density data block
+ntomo=read_nsolu_cart(tomo_file)
 
 ; extract data slice
 model_ne_synop, ntomo, radius, nemap, /quiet, lat = tomo_lat, lon = tomo_lon
