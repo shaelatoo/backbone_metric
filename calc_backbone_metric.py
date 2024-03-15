@@ -7,6 +7,7 @@
 # 
 # ==========================================================================
 # 12/17/2020    sij    copied from compare_streamer_lats.py 
+# March 2024    sij    added s-factor comparison capability
 #
 #-----------------------------------------------------------------------------
 """ routines to calculate value of Backbone metric """
@@ -262,11 +263,11 @@ def find_squashingfactor_peaks(wsafile, altitude):
             f'Squashing factor is measured at {modelheader["RADOUT"]} R_sun.')
 
     # find peaks
-    nlats = round(180./modelheader['GRID'])
-    grid_radians = np.radians(modelheader['GRID'])
-    lats = np.linspace(-np.pi/2. + 0.5*grid_radians, np.pi/2. - 0.5*grid_radians, nlats)
-    lons = np.linspace(0.5*grid_radians, 2*np.pi - 0.5*grid_radians, 2*nlats)
-    lons = [(i*grid_radians) - (grid_radians)/2. for i in np.arange(1, 2*nlats+1)]
+    grid = modelheader['GRID']
+    nlats = round(180./grid)
+    lats = np.linspace(-90. + 0.5*grid, 90. - 0.5*grid, nlats)
+    lons = np.linspace(0.5*grid, 360. - 0.5*grid, 2*nlats)
+#    lons = [(i*grid_radians) - (grid_radians)/2. for i in np.arange(1, 2*nlats+1)]
     sf_lats, sf_lons = locate_ridges(lons, lats, sfactor)
 
     return sf_lons, sf_lats
@@ -276,10 +277,10 @@ def backbone_metric(tomofile, modelfile, altitude, figure_outfile=False):
     """ main module """
 
     if 'bcb' in modelfile:
-        print(f'Running bcb file: {modelfile}.')
+        print(f'Doing neutral line comparison with bcb file: {modelfile}.')
         cs_xs,cs_ys = find_neutral_line_coords(modelfile, altitude)
     elif 'wsa_' in modelfile:
-        print(f'Running wsa file: {modelfile}.')
+        print(f'Doing squashing factor comparison with  wsa file: {modelfile}.')
         cs_xs,cs_ys = find_squashingfactor_peaks(modelfile, altitude)
     else:
         print(f'Model file: {modelfile} is not in an expected format')
