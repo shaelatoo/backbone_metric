@@ -79,18 +79,24 @@ def find_neutral_line_coords(bcbfile, altitude):
 
     # translate to relative strength of radial field component
     B_tot = norm(B_alt, axis = 0)
-    relative_Br_alt = np.divide(B_alt[0], B_tot)
+    relative_Br = np.divide(B_alt[0], B_tot)
+
+    return segment_bfield_slice(relative_Br, wsa_bfield.lons, wsa_bfield.lats)
+
+
+def segment_bfield_slice(B_slice, lons, lats):
+
 
     # use matplotlib contour routine to get contour coordinates
     # Br is the first slice (dimension 2 of four), radial coordinate is dimension 1
     xs = []
     ys = []
-    contour_obj = plt.contour(wsa_bfield.lons, wsa_bfield.lats, relative_Br_alt, levels=[0.0])
+    contour_obj = plt.contour(lons, lats, B_slice, levels=[0.0])
     for segs in contour_obj.allsegs[0]:
         xs.extend(segs[:,0])
         ys.extend(segs[:,1])
 
-    return(xs,ys)
+    return (xs,ys)
 
 
 def read_tomo(filename):
@@ -249,45 +255,68 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     return metric
 
 
-def find_squashingfactor_peaks(wsafile, altitude):
+def find_wsa_peaks(wsafile, altitude, squashing=False):
     """ find peaks in the squashing factor layer of a standard WSA output file:
            filenames like: wsa_yyyymmddhhmmR<realization>_<observatory>.fits
     """
 
     # read wsa output file
-    sfactor,modelheader = fits.getdata(wsafile, header=True)
-    sfactor = np.abs(sfactor[9])
+    slice_of_interest,modelheader = fits.getdata(wsafile, header=True)
 
-    # print warning about altitude
-    print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.'  
-            f'Squashing factor is measured at {modelheader["RADOUT"]} R_sun.')
-
-    # find peaks
+    # define grid
     grid = modelheader['GRID']
     nlats = round(180./grid)
     lats = np.linspace(-90. + 0.5*grid, 90. - 0.5*grid, nlats)
     lons = np.linspace(0.5*grid, 360. - 0.5*grid, 2*nlats)
-#    lons = [(i*grid_radians) - (grid_radians)/2. for i in np.arange(1, 2*nlats+1)]
-    sf_lats, sf_lons = locate_ridges(lons, lats, sfactor)
+
+    # find peaks
+    if squashing:
+        # Squashing factor at RADOUT
+        print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  ' 
+                             f'Squashing factor is measured at {modelheader["RADOUT"]} R_sun.')
+        slice_of_interest = np.abs(slice_of_interest[9])
+        sf_lats, sf_lons = locate_ridges(lons, lats, slice_of_interest)
+    else:
+        # Coronal field at RADUSER (nT)
+        print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  '
+                             f'B-field is measured at {modelheader["RADUSER"]} R_sun.')
+        slice_of_interest = slice_of_interest[8]
+        sf_lons,sf_lats = segment_bfield_slice(slice_of_interest, lons, lats)
 
     return sf_lons, sf_lats
 
 
-def backbone_metric(tomofile, modelfile, altitude, figure_outfile=False):
-    """ main module """
+def backbone_metric(tomofile, bcb_file=None, squashing_file=None, wsa_file=None, 
+                             altitude=2.5, figure_outfile=False):
+    """ calls appropriate calculation routine, depending on desired comparison """
 
-    if 'bcb' in modelfile:
-        print(f'Doing neutral line comparison with bcb file: {modelfile}.')
-        cs_xs,cs_ys = find_neutral_line_coords(modelfile, altitude)
-    elif 'wsa_' in modelfile:
-        print(f'Doing squashing factor comparison with  wsa file: {modelfile}.')
-        cs_xs,cs_ys = find_squashingfactor_peaks(modelfile, altitude)
+    # get model slice that user wants to compare with tomography results
+    if wsa_file:
+        # user wants to use B-field slice from WSA output file (wsa_*)
+        print(f'Doing neutral line comparison with wsa file: {wsa_file}.')
+        cs_xs,cs_ys = find_wsa_peaks(wsa_file, altitude)
+    elif squashing_file:
+        # user wants to compare squashing factor from WSA output file (wsa_*)
+        print(f'Doing squashing factor comparison with  wsa file: {squashing_file}.')
+        cs_xs,cs_ys = find_wsa_peaks(squashing_file, altitude, squashing=True)
+    elif bcb_file:
+        # user wants to find B-field slice in WSA B-field output "bcb" file
+        print(f'Doing neutral line comparison with bcb file: {bcb_file}.')
+        cs_xs,cs_ys = find_neutral_line_coords(bcb_file, altitude)
     else:
-        print(f'Model file: {modelfile} is not in an expected format')
+        print("User must specify a bcb_file, squashing_file, or wsa_file")
+        return
+
+    # get tomography peaks for comparison
     streamer_xs, streamer_ys = identify_tomography_peaks(tomofile)
+
+    # calculate metric value
     metric = calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys)
+
+    # optionally, create figure illustrating comparison
     if figure_outfile:
         combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile, metric)
+
     return metric
 
 
@@ -296,9 +325,14 @@ if __name__ == '__main__':
 
     ARG_PARSER = argparse.ArgumentParser()
     ARG_PARSER.add_argument('-t', '--tomofile', action='store', default='', dest='tomofile')
-    ARG_PARSER.add_argument('-a', '--altitude', action='store', default='', dest='altitude', type=float)
-    ARG_PARSER.add_argument('-b', '--modelfile', action='store', default='', dest='modelfile')
-    ARG_PARSER.add_argument('-fo', '--figure_outfile', action='store', default=False)
+    ARG_PARSER.add_argument('-s', '--squashing_file', action='store', default=None, 
+                             dest='squashing_file')
+    ARG_PARSER.add_argument('-w', '--wsa_file', action='store', default=None, dest='wsa_file')
+    ARG_PARSER.add_argument('-b', '--bcb_file', action='store', default=None, dest='bcb_file')
+    ARG_PARSER.add_argument('-a', '--altitude', action='store', default=2.5, dest='altitude',
+                             type=float)
+    ARG_PARSER.add_argument('-o', '--figure_outfile', action='store', default=False)
     ARGS = ARG_PARSER.parse_args()
 
-    print(backbone_metric(ARGS.tomofile, ARGS.modelfile, ARGS.altitude, ARGS.figure_outfile))
+    print(backbone_metric(ARGS.tomofile, bcb_file=ARGS.bcb_file, squashing_file=ARGS.squashing_file,
+                    wsa_file=ARGS.wsa_file, altitude=ARGS.altitude, figure_outfile=ARGS.figure_outfile))
