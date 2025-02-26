@@ -46,7 +46,6 @@ min_peak_width = 1.5
 def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
     """ calculates distance between two points on a sphere, in radians """
 
-
     if degrees:    # convert to radians, if needed
         first_term = math.sin(math.radians(theta0))*math.sin(math.radians(theta1))
         second_term = math.cos(math.radians(theta0)) * math.cos(math.radians(theta1)) * \
@@ -55,10 +54,7 @@ def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
         first_term = math.sin(theta0)*math.sin(theta1)
         second_term = math.cos(theta0) * math.cos(theta1) * math.cos(phi0-phi1)
 
-    try:
-        dist = np.arccos(first_term + second_term)
-    except:
-        print(first_term + second_term)
+    dist = np.arccos(first_term + second_term)
 
     if cossep:     # return the cosine of the separation instead
         return first_term + second_term
@@ -75,17 +71,18 @@ def find_neutral_line_coords(bcbfile, altitude):
 
     # find altitude slice closest to desired altitude
     closest_alt = np.argmin([abs(altitude - rad) for rad in wsa_bfield.radii])
-    B_alt = wsa_bfield.br[closest_alt]
 
     # translate to relative strength of radial field component
-    B_tot = norm(B_alt, axis = 0)
-    relative_Br = np.divide(B_alt[0], B_tot)
+    Br = np.array(wsa_bfield.br[closest_alt])
+    Bphi =  np.array(wsa_bfield.bphi[closest_alt])
+    Btheta =  np.array(wsa_bfield.btheta[closest_alt])
+    B_tot = norm(np.array([Bphi, Btheta, Br]),axis=0)  # norm is the same in cartesian or spherical coords
+    relative_Br = np.divide(Br, B_tot)
 
     return segment_bfield_slice(relative_Br, wsa_bfield.lons, wsa_bfield.lats)
 
 
 def segment_bfield_slice(B_slice, lons, lats):
-
 
     # use matplotlib contour routine to get contour coordinates
     # Br is the first slice (dimension 2 of four), radial coordinate is dimension 1
@@ -181,7 +178,6 @@ def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_out
     print(f'making file name: {figure_outfile}')
     tomo_lon, tomo_lat, e_density_map = read_tomo(tomofile)
     emap = np.asarray(e_density_map)
-    # temporary plotting instructions - for debugging
     plt.imshow(emap, origin='lower', extent=[tomo_lon[0], tomo_lon[-1], tomo_lat[0], tomo_lat[-1]])
     plt.plot(streamer_xs, streamer_ys,'b.', label='Tomo.-based Streamer')
     plt.plot(cs_xs,cs_ys,'rx',label='WSA Neutral Line')
@@ -234,7 +230,7 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     xs = np.linspace(0,360., num=180)
     ys = np.linspace(-90.,90.,num=91)
     cs_xs2, cs_ys2 = np.meshgrid(xs, ys)
-    cs_ys2 = np.reshape(cs_ys2, (180*91))
+    cs_ys2 = np.reshape(cs_ys2, (180*91))    # note, should be grid-dependent
     cs_xs2 = np.reshape(cs_xs2, (180*91))
     shell_backbone = []
     for phi, theta in zip(cs_xs2, cs_ys2):
