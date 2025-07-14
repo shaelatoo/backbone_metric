@@ -172,7 +172,8 @@ def identify_tomography_peaks(tomofile):
     return density_lons, density_lats
 
 
-def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile, metric_val):
+def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile,
+                             metric_val):
     """ creates a figure showing electron density peaks and model current sheet locations """
 
     print(f'making file name: {figure_outfile}')
@@ -268,13 +269,15 @@ def find_wsa_peaks(wsafile, altitude, squashing=False):
     # find peaks
     if squashing:
         # Squashing factor at RADOUT
-        print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  ' 
+        if not altitude == modelheader["RADOUT"]:
+            print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  ' 
                              f'Squashing factor is measured at {modelheader["RADOUT"]} R_sun.')
         slice_of_interest = np.abs(slice_of_interest[9])
         sf_lats, sf_lons = locate_ridges(lons, lats, slice_of_interest)
     else:
         # Coronal field at RADUSER (nT)
-        print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  '
+        if not altitude == modelheader["RADUSER"]:
+            print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  '
                              f'B-field is measured at {modelheader["RADUSER"]} R_sun.')
         slice_of_interest = slice_of_interest[8]
         sf_lons,sf_lats = segment_bfield_slice(slice_of_interest, lons, lats)
