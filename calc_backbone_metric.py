@@ -24,6 +24,10 @@ import matplotlib.cm as cm
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 import read_wsa_bfield
+import pandas as pd
+from get_streamerbelt_byhand import rfits_n3d_py
+from pathlib import Path
+
 
 # electron density peak-finding parameters
 mindiff = 0.0001 
@@ -41,6 +45,8 @@ height_scale = 3
 #min_peak_width = 2.
 min_peak_width = 1.5
 
+# parameters
+#tomodir='/home/sjonesme/stereo_planner/tomography_data/N3D_COR1B_2024/fits/'
 
 
 def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
@@ -172,13 +178,33 @@ def identify_tomography_peaks(tomofile):
     return density_lons, density_lats
 
 
+def get_emap(tomofile, tomodir):
+    # gets electron density slice associated with csv file containing byhand streamer
+    #     belt coordinates
+
+    orig_tomofile_basename = Path(tomofile).stem
+    alt = float(orig_tomofile_basename[orig_tomofile_basename.rfind('_r')+2:])
+    orig_tomofile_basename = orig_tomofile_basename[:orig_tomofile_basename.rfind('_')]
+    orig_tomofile = os.path.join(tomodir, orig_tomofile_basename)
+    r, th, ph, density = rfits_n3d_py(orig_tomofile)
+    closest_rind = np.argmin(np.abs(r-alt))
+    tomo_slice = density[closest_rind]  # correct dimension???
+    return ph, th, tomo_slice    
+
+
 def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile,
-                             metric_val):
+                             metric_val, byhand, tomodir):
     """ creates a figure showing electron density peaks and model current sheet locations """
 
     print(f'making file name: {figure_outfile}')
-    tomo_lon, tomo_lat, e_density_map = read_tomo(tomofile)
-    emap = np.asarray(e_density_map)
+    # read density map and grid coordinates
+    if byhand:
+        tomo_lon, tomo_lat, emap = get_emap(tomofile, tomodir)
+    else:
+        tomo_lon, tomo_lat, e_density_map = read_tomo(tomofile)
+        emap = np.asarray(e_density_map)
+
+    # make figure
     plt.imshow(emap, origin='lower', extent=[tomo_lon[0], tomo_lon[-1], tomo_lat[0], tomo_lat[-1]])
     plt.plot(streamer_xs, streamer_ys,'b.', label='Tomo.-based Streamer')
     plt.plot(cs_xs,cs_ys,'rx',label='WSA Neutral Line')
@@ -224,8 +250,8 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
             angdist.append(angular_separation(phi, theta, slon, slat, degrees=True))
         gamma_ind = np.argmin(angdist)  # index of minimum angular distance
         backbone.append(proximity_function(phi, theta, gammas[gamma_ind, :], kappa))
-    backbone_weights = np.cos(np.radians(cs_ys))  # weighting to de-emphasize higher-latitude points, which are 
-                   #     disproportionately represented
+    backbone_weights = np.cos(np.radians(cs_ys))  # weighting to de-emphasize higher-
+                             # latitude points, which are disproportionately represented
 
     # find proximity function value at each lat,lon in shell
     xs = np.linspace(0,360., num=180)
@@ -286,7 +312,8 @@ def find_wsa_peaks(wsafile, altitude, squashing=False):
 
 
 def backbone_metric(tomofile, bcb_file=None, squashing_file=None, wsa_file=None, 
-                             altitude=2.5, figure_outfile=False):
+                             altitude=2.5, figure_outfile=False, byhand=False,
+                             tomodir=None):
     """ calls appropriate calculation routine, depending on desired comparison """
 
     # get model slice that user wants to compare with tomography results
@@ -307,16 +334,28 @@ def backbone_metric(tomofile, bcb_file=None, squashing_file=None, wsa_file=None,
         return
 
     # get tomography peaks for comparison
-    streamer_xs, streamer_ys = identify_tomography_peaks(tomofile)
+    if byhand:
+        streamer_xs, streamer_ys = get_byhand_coords(tomofile)
+    else:
+        streamer_xs, streamer_ys = identify_tomography_peaks(tomofile)
 
     # calculate metric value
     metric = calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys)
 
     # optionally, create figure illustrating comparison
     if figure_outfile:
-        combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile, metric)
+        combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_outfile,
+                             metric, byhand, tomodir)
 
     return metric
+
+
+def get_byhand_coords(tomofile):
+    # reads longitudes and latitudes from a csv file created by tracing
+    #      features by hand
+
+    df = pd.read_csv(tomofile)
+    return df.lons, df.lats
 
 
 
@@ -331,7 +370,17 @@ if __name__ == '__main__':
     ARG_PARSER.add_argument('-a', '--altitude', action='store', default=2.5, dest='altitude',
                              type=float)
     ARG_PARSER.add_argument('-o', '--figure_outfile', action='store', default=False)
+    ARG_PARSER.add_argument('-by', '--byhand', action='store_true')
+    ARG_PARSER.add_argument('-td', '--tomodir', default=False)
     ARGS = ARG_PARSER.parse_args()
 
-    print(backbone_metric(ARGS.tomofile, bcb_file=ARGS.bcb_file, squashing_file=ARGS.squashing_file,
-                    wsa_file=ARGS.wsa_file, altitude=ARGS.altitude, figure_outfile=ARGS.figure_outfile))
+    if ARGS.byhand and ARGS.figure_outfile:
+        if not ARGS.tomodir:
+            print(colored('If byhand constraints are used, tomodir mush be provided.',
+                             'red', attrs={'dark'}))
+    else:
+        metric = backbone_metric(ARGS.tomofile, bcb_file=ARGS.bcb_file, 
+                             squashing_file=ARGS.squashing_file,
+                             wsa_file=ARGS.wsa_file, altitude=ARGS.altitude, figure_outfile= 
+                             ARGS.figure_outfile, byhand=ARGS.byhand, tomodir=ARGS.tomodir)
+        print(f'Metric value: {metric}')
