@@ -30,23 +30,16 @@ from pathlib import Path
 
 
 # electron density peak-finding parameters
-mindiff = 0.0001 
-min_series_max = 10.
-prom_scale = 30.
-height_scale = 8.
-min_peak_width = 8.
+tomo_params = {'mindiff': 0.0001, 'min_series_max': 10., 'prom_scale': 30., 'height_scale': 8.,
+        'min_peak_width': 1.5}
+#min_peak_width = 8.
 
-# squashing factor peak-finding parameters
-mindiff = 0.0001 
-min_series_max = 10.
-prom_scale = 30.
-height_scale = 3
-#height_scale = 2
-#min_peak_width = 2.
-min_peak_width = 1.5
+## squashing factor peak-finding parameters
+sq_fac_params = {'mindiff': 0.0001, 'min_series_max': 10., 'prom_scale': 30., 'height_scale': 3,
+        'min_peak_width': 1.5}
+##min_peak_width = 2.
+##height_scale = 2
 
-# parameters
-#tomodir='/home/sjonesme/stereo_planner/tomography_data/N3D_COR1B_2024/fits/'
 
 
 def angular_separation(phi0, theta0, phi1, theta1, degrees=False, cossep=False):
@@ -121,18 +114,24 @@ def read_tomo(filename):
     return(tomo_lon, tomo_lat, e_density_map)
 
 
-def locate_ridges(lons, lats, ridgemap):
+def locate_ridges(lons, lats, ridgemap, squashing_fac=False):
 
+
+    if squashing_fac:
+        params = sq_fac_params
+    else:
+        params = tomo_params
     ridge_lats=[]
     ridge_lons=[]
     # loop over every column of image
     for lon_ind in range(len(lons)):
         lon_strip = ridgemap[:,lon_ind]
         biggest_diff = np.max(abs(np.diff(lon_strip)))
-        if biggest_diff >= mindiff and lon_strip.max() > ridgemap.max() / min_series_max:
-            peaks,_ = find_peaks(lon_strip, prominence = lon_strip.max() / prom_scale, \
-                               height = ridgemap.max() / height_scale, \
-                               width = min_peak_width)
+        if biggest_diff >= params['mindiff'] and lon_strip.max() > \
+                               ridgemap.max() / params['min_series_max']:
+            peaks,_ = find_peaks(lon_strip, prominence = lon_strip.max() / params['prom_scale'], \
+                               height = ridgemap.max() / params['height_scale'], \
+                               width = params['min_peak_width'])
             ridge_lats.extend([lats[peak] for peak in peaks])
             ridge_lons.extend([lons[lon_ind] for peak in peaks])
 
@@ -141,9 +140,11 @@ def locate_ridges(lons, lats, ridgemap):
         wrap_end = round(10. / 360. * len(lons)) #tack on some extra data so we can find peaks near the edges
         lat_strip = np.append(ridgemap[lat_ind, :], ridgemap[lat_ind, : wrap_end])
         biggest_diff = np.max(abs(np.diff(lat_strip)))
-        if biggest_diff >= mindiff and lat_strip.max() > ridgemap.max() / min_series_max:
-             peaks,_ = find_peaks(lat_strip, prominence = lat_strip.max() / prom_scale, \
-                               height = ridgemap.max() / height_scale, width = min_peak_width)
+        if biggest_diff >= params['mindiff'] and lat_strip.max() > \
+                               ridgemap.max() / params['min_series_max']:
+             peaks,_ = find_peaks(lat_strip, prominence = lat_strip.max() / params['prom_scale'], \
+                               height = ridgemap.max() / params['height_scale'],
+                               width = params['min_peak_width'])
              peaks[peaks >= len(lons)] -= len(lons)
              ridge_lats.extend([lats[lat_ind] for peak in peaks])
              ridge_lons.extend([lons[peak] for peak in peaks])
@@ -214,7 +215,7 @@ def combined_figure(cs_xs, cs_ys, streamer_xs, streamer_ys, tomofile, figure_out
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys())
-    plt.annotate("B= " + str(metric_val), (230., -80), color='white', fontsize=18.)
+    plt.annotate("M= " + str(metric_val), (230., -80), color='white', fontsize=18.)
     plt.savefig(figure_outfile)
     plt.close()
 
@@ -278,6 +279,19 @@ def calc_backbone_metric(cs_xs, cs_ys, streamer_xs, streamer_ys, test=False):
     return metric
 
 
+def carrington_frame(datamap, lons):
+    """ shift map and longitude array so that as near to Carrington frame as possible """
+
+    indzero=np.argmin(abs(lons-360.))
+    if lons[indzero] < 360.:
+        indzero += 1
+    shifted_datamap = np.roll(datamap, len(lons) - indzero, axis = 2)
+    shifted_lons = np.roll(lons, len(lons) - indzero)
+    shifted_lons[shifted_lons >= 360.] -= 360.
+
+    return shifted_datamap, shifted_lons
+
+
 def find_wsa_peaks(wsafile, altitude, squashing=False):
     """ find peaks in the squashing factor layer of a standard WSA output file:
            filenames like: wsa_yyyymmddhhmmR<realization>_<observatory>.fits
@@ -288,9 +302,14 @@ def find_wsa_peaks(wsafile, altitude, squashing=False):
 
     # define grid
     grid = modelheader['GRID']
+    carrlon = modelheader['CARRLONG']
     nlats = round(180./grid)
     lats = np.linspace(-90. + 0.5*grid, 90. - 0.5*grid, nlats)
-    lons = np.linspace(0.5*grid, 360. - 0.5*grid, 2*nlats)
+    lons = np.linspace(0.5*grid, 360. - 0.5*grid, 2*nlats) + carrlon
+
+    # adjust longitudes, if needed
+    if carrlon != 0:
+        slice_of_interest, lons = carrington_frame(slice_of_interest, lons)
 
     # find peaks
     if squashing:
@@ -299,7 +318,7 @@ def find_wsa_peaks(wsafile, altitude, squashing=False):
             print(f'Warning: User indicated tomographic slice is at {altitude} R_sun.  ' 
                              f'Squashing factor is measured at {modelheader["RADOUT"]} R_sun.')
         slice_of_interest = np.abs(slice_of_interest[9])
-        sf_lats, sf_lons = locate_ridges(lons, lats, slice_of_interest)
+        sf_lats, sf_lons = locate_ridges(lons, lats, slice_of_interest, squashing_fac=True)
     else:
         # Coronal field at RADUSER (nT)
         if not altitude == modelheader["RADUSER"]:
